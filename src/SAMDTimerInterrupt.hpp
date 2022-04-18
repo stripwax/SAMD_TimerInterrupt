@@ -411,10 +411,11 @@ class SAMDTimerInterrupt
     float   _period;
     int             _prescaler;
     int             _compareValue;
+    bool initialized;
 
   public:
 
-    SAMDTimerInterrupt(const SAMDTimerNumber& timerNumber)
+    SAMDTimerInterrupt(const SAMDTimerNumber& timerNumber) : initialized(false)
     {
       _timerNumber = timerNumber;
            

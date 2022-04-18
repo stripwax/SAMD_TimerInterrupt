@@ -163,40 +163,46 @@
     TISR_LOGDEBUG1(F("_period ="), _period);
     
     if (_timerNumber == TIMER_TC3)
-    {    
-      REG_GCLK_CLKCTRL = (uint16_t) (GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_ID (GCM_TCC2_TC3));
-      
-      while ( GCLK->STATUS.bit.SYNCBUSY == 1 );
-      
-      TISR_LOGWARN3(F("SAMDTimerInterrupt: F_CPU (MHz) ="), F_CPU/1000000, F(", TIMER_HZ ="), TIMER_HZ/1000000);
-      TISR_LOGWARN3(F("TC3_Timer::startTimer _Timer = 0x"), String((uint32_t) _SAMDTimer, HEX), F(", TC3 = 0x"), String((uint32_t) TC3, HEX));
-     
-      SAMD_TC3->CTRLA.reg &= ~TC_CTRLA_ENABLE;
+    {
+      noInterrupts();
+      if (!initialized)
+      {
+        REG_GCLK_CLKCTRL = (uint16_t) (GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_ID (GCM_TCC2_TC3));
+        while ( GCLK->STATUS.bit.SYNCBUSY);
+                
+        TISR_LOGWARN3(F("SAMDTimerInterrupt: F_CPU (MHz) ="), F_CPU/1000000, F(", TIMER_HZ ="), TIMER_HZ/1000000);
+        TISR_LOGWARN3(F("TC3_Timer::startTimer _Timer = 0x"), String((uint32_t) _SAMDTimer, HEX), F(", TC3 = 0x"), String((uint32_t) TC3, HEX));
 
-      // Use the 16-bit timer
-      SAMD_TC3->CTRLA.reg |= TC_CTRLA_MODE_COUNT16;
-      
-      while (SAMD_TC3->STATUS.bit.SYNCBUSY == 1);
-
-      // Use match mode so that the timer counter resets when the count matches the compare register
-      SAMD_TC3->CTRLA.reg |= TC_CTRLA_WAVEGEN_MFRQ;
-      
-      while (SAMD_TC3->STATUS.bit.SYNCBUSY == 1);
+        SAMD_TC3->CTRLA.reg &= ~TC_CTRLA_ENABLE;
   
-      setPeriod_TIMER_TC3(_period);
+        // Use the 16-bit timer
+        SAMD_TC3->CTRLA.reg |= TC_CTRLA_MODE_COUNT16;
+        while (SAMD_TC3->STATUS.bit.SYNCBUSY);
+  
+        // Use match mode so that the timer counter resets when the count matches the compare register
+        SAMD_TC3->CTRLA.reg |= TC_CTRLA_WAVEGEN_MFRQ;
+        while (SAMD_TC3->STATUS.bit.SYNCBUSY);
+    
+        // Enable the compare interrupt
+        SAMD_TC3->INTENSET.reg = 0;
+        SAMD_TC3->INTENSET.bit.MC0 = 1;
+  
+        _callback     = callback;
+        TC3_callback  = callback;
 
-      // Enable the compare interrupt
-      SAMD_TC3->INTENSET.reg = 0;
-      SAMD_TC3->INTENSET.bit.MC0 = 1;
+        NVIC_EnableIRQ(TC3_IRQn);
+  
+        setPeriod_TIMER_TC3(_period); // this also enables the timer
 
-      NVIC_EnableIRQ(TC3_IRQn);
-
-      SAMD_TC3->CTRLA.reg |= TC_CTRLA_ENABLE;
-      
-      while (SAMD_TC3->STATUS.bit.SYNCBUSY == 1);
-
-      _callback     = callback;
-      TC3_callback  = callback;
+        initialized = true;
+      }
+      else
+      {
+        setPeriod_TIMER_TC3(_period);
+        _callback     = callback;
+        TC3_callback  = callback;
+      }
+      interrupts();
     }
     else if (_timerNumber == TIMER_TCC)
     {
