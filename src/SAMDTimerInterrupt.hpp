@@ -147,13 +147,13 @@
 #include "Arduino.h"
 
 #ifndef SAMD_TIMER_INTERRUPT_VERSION
-  #define SAMD_TIMER_INTERRUPT_VERSION            "SAMDTimerInterrupt v1.6.0"
+  #define SAMD_TIMER_INTERRUPT_VERSION            "SAMDTimerInterrupt v1.7.0"
   
   #define SAMD_TIMER_INTERRUPT_VERSION_MAJOR      1
-  #define SAMD_TIMER_INTERRUPT_VERSION_MINOR      6
+  #define SAMD_TIMER_INTERRUPT_VERSION_MINOR      7
   #define SAMD_TIMER_INTERRUPT_VERSION_PATCH      0
 
-  #define SAMD_TIMER_INTERRUPT_VERSION_INT        1006000
+  #define SAMD_TIMER_INTERRUPT_VERSION_INT        1007000
 #endif
 
 #include "TimerInterrupt_Generic_Debug.h"
@@ -474,6 +474,7 @@ class SAMDTimerInterrupt
       {        
         // Disable TC3
         SAMD_TC3->CTRLA.reg &= ~TC_CTRLA_ENABLE;
+        while (SAMD_TC3->STATUS.bit.SYNCBUSY);
       }
       else if (_timerNumber == TIMER_TCC)
       {       
@@ -504,6 +505,7 @@ class SAMDTimerInterrupt
       {       
         // Enable TC3
         SAMD_TC3->CTRLA.reg |= TC_CTRLA_ENABLE;
+        while (SAMD_TC3->STATUS.bit.SYNCBUSY);
       }
       else if (_timerNumber == TIMER_TCC)
       {        
@@ -530,85 +532,87 @@ class SAMDTimerInterrupt
     
     void setPeriod_TIMER_TC3(const float& period)
     {
-      TcCount16* _Timer = (TcCount16*) _SAMDTimer;
-      
-      _Timer->CTRLA.reg &= ~TC_CTRLA_ENABLE;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      _Timer->CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV1024;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      _Timer->CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV256;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      _Timer->CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV64;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      _Timer->CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV16;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      _Timer->CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV4;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      _Timer->CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV2;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      _Timer->CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV1;
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
-      
-	    if (period > 300000) 
-	    {
-		    // Set prescaler to 1024
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV1024;
-		    _prescaler = 1024;
-	    } 
-	    else if (80000 < period && period <= 300000) 
-	    {
-		    // Set prescaler to 256
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV256;
-		    _prescaler = 256;
-	    } 
-	    else if (20000 < period && period <= 80000) 
-	    {
-		    // Set prescaler to 64
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV64;
-		    _prescaler = 64;
-	    } 
-	    else if (10000 < period && period <= 20000) 
-	    {
-		    // Set prescaler to 16
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV16;
-		    _prescaler = 16;
-	    } 
-	    else if (5000 < period && period <= 10000) 
-	    {
-		    // Set prescaler to 8
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV8;
-		    _prescaler = 8;
-	    } 
-	    else if (2500 < period && period <= 5000) 
-	    {
-		    // Set prescaler to 4
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV4;
-		    _prescaler = 4;
-	    } 
-	    else if (1000 < period && period <= 2500) 
-	    {
-		    // Set prescaler to 2
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV2;
-		    _prescaler = 2;
-	    } 
-	    else if (period <= 1000) 
-	    {
-		    // Set prescaler to 1
-		    _Timer->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV1;
-		    _prescaler = 1;
-	    }
-	    
-	    while (_Timer->STATUS.bit.SYNCBUSY == 1);
+      TcCount16* _Timer = (TcCount16*) TC3;
+      uint16_t ctrla = _Timer->CTRLA.reg;
 
-	    _compareValue = (int)(TIMER_HZ / (_prescaler / (period / 1000000.0))) - 1;
-
+      ctrla &= ~(TC_CTRLA_PRESCALER_DIV1024 | TC_CTRLA_PRESCALER_DIV256 | TC_CTRLA_PRESCALER_DIV64 | TC_CTRLA_PRESCALER_DIV16 | TC_CTRLA_PRESCALER_DIV4 | TC_CTRLA_PRESCALER_DIV2 | TC_CTRLA_PRESCALER_DIV1);
       
+      if (period > 300000) 
+      {
+        // Set prescaler to 1024
+        ctrla |= TC_CTRLA_PRESCALER_DIV1024;
+        _prescaler = 1024;
+      } 
+      else if (80000 < period && period <= 300000) 
+      {
+        // Set prescaler to 256
+        ctrla |= TC_CTRLA_PRESCALER_DIV256;
+        _prescaler = 256;
+      } 
+      else if (20000 < period && period <= 80000) 
+      {
+        // Set prescaler to 64
+        ctrla |= TC_CTRLA_PRESCALER_DIV64;
+        _prescaler = 64;
+      } 
+      else if (10000 < period && period <= 20000) 
+      {
+        // Set prescaler to 16
+        ctrla |= TC_CTRLA_PRESCALER_DIV16;
+        _prescaler = 16;
+      } 
+      else if (5000 < period && period <= 10000) 
+      {
+        // Set prescaler to 8
+        ctrla |= TC_CTRLA_PRESCALER_DIV8;
+        _prescaler = 8;
+      } 
+      else if (2500 < period && period <= 5000) 
+      {
+        // Set prescaler to 4
+        ctrla |= TC_CTRLA_PRESCALER_DIV4;
+        _prescaler = 4;
+      } 
+      else if (1000 < period && period <= 2500) 
+      {
+        // Set prescaler to 2
+        ctrla |= TC_CTRLA_PRESCALER_DIV2;
+        _prescaler = 2;
+      } 
+      else if (period <= 1000) 
+      {
+        // Set prescaler to 1
+        ctrla |= TC_CTRLA_PRESCALER_DIV1;
+        _prescaler = 1;
+      }
+
+      _compareValue = (int)(TIMER_HZ / (_prescaler / (period / 1000000.0))) - 1;
+
       // Make sure the count is in a proportional position to where it was
       // to prevent any jitter or disconnect when changing the compare value.
-      _Timer->COUNT.reg = map(_Timer->COUNT.reg, 0, _Timer->CC[0].reg, 0, _compareValue);
-      _Timer->CC[0].reg = _compareValue;
+      _Timer->READREQ.reg = TC_READREQ_RREQ | TC_READREQ_ADDR(0x10); // 0x10 is the offset of the 16-bit count register
+      while (_Timer->STATUS.bit.SYNCBUSY);
+      uint16_t prev_counter = _Timer->COUNT.reg;
+
+      // cannot update ctrla at the same time as the enabled bit is set
+      _Timer->CTRLA.reg &= ~TC_CTRLA_ENABLE;
+      while (_Timer->STATUS.bit.SYNCBUSY);
+
+      // need to synchronise the count and cc values
+      _Timer->READREQ.reg = TC_READREQ_RREQ | TC_READREQ_ADDR(0x18); // 0x18 is the offset of the 16-bit CC0 register
+      while (_Timer->STATUS.bit.SYNCBUSY);
+
+      uint16_t old_compare_value = _Timer->CC[0].reg;
+      _Timer->CC[0].reg = (uint16_t)(-1); // max, so that changing Count doesn't end up wrapping it back to zero again due to the continuous comparison
+
+      _Timer->COUNT.reg = map(prev_counter, 0, old_compare_value, 0, _compareValue);
+      while (_Timer->STATUS.bit.SYNCBUSY);
       
-      while (_Timer->STATUS.bit.SYNCBUSY == 1);
+      _Timer->CC[0].reg = _compareValue;
+      while (_Timer->STATUS.bit.SYNCBUSY);
+
+      _Timer->CTRLA.reg = ctrla | TC_CTRLA_ENABLE;
+      while (_Timer->STATUS.bit.SYNCBUSY);
       
       TISR_LOGDEBUG3(F("SAMD21 TC3 period ="), period, F(", _prescaler ="), _prescaler);
       TISR_LOGDEBUG1(F("_compareValue ="), _compareValue);
