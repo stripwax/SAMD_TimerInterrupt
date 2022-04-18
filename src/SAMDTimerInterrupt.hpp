@@ -217,12 +217,13 @@ class SAMDTimerInterrupt
     }
 
     bool setFrequency(const float& frequency, timerCallback callback);
+    bool _setPeriod(const unsigned long _period, timerCallback callback);
 
     // interval (in microseconds) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
     // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
     bool setInterval(const unsigned long& interval, timerCallback callback)
     {
-      return setFrequency((float) (1000000.0f / interval), callback);
+      return _setPeriod(interval, callback);
     }
 
     bool attachInterrupt(const float& frequency, timerCallback callback)
@@ -234,7 +235,7 @@ class SAMDTimerInterrupt
     // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
     bool attachInterruptInterval(const unsigned long& interval, timerCallback callback)
     {
-      return setFrequency( (float) ( 1000000.0f / interval), callback);
+      return _setPeriod(interval, callback);
     }
 
     void detachInterrupt()
@@ -434,12 +435,13 @@ class SAMDTimerInterrupt
     }
    
     bool setFrequency(const float& frequency, timerCallback callback);
+    bool _setPeriod(const unsigned long _period, timerCallback callback);
 
     // interval (in microseconds) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
     // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
     bool setInterval(const unsigned long& interval, timerCallback callback)
     {
-      return setFrequency((float) (1000000.0f / interval), callback);
+      return _setPeriod(interval, callback);
     }
 
     bool attachInterrupt(const float& frequency, timerCallback callback)
@@ -451,7 +453,7 @@ class SAMDTimerInterrupt
     // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
     bool attachInterruptInterval(const unsigned long& interval, timerCallback callback)
     {
-      return setFrequency( (float) ( 1000000.0f / interval), callback);
+      return _setPeriod(interval, callback);
     }
 
     void detachInterrupt()

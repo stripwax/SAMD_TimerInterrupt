@@ -67,12 +67,8 @@
     }
   }
 
-  // frequency (in hertz) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
-  // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
-  bool SAMDTimerInterrupt::setFrequency(const float& frequency, timerCallback callback)
+  bool SAMDTimerInterrupt::_setPeriod(const unsigned long _period, timerCallback callback)
   {
-    _period =  (1000000.0f / frequency);
-    
     if (_timerNumber == TIMER_TC3)
     {    
       TISR_LOGWARN3(F("SAMDTimerInterrupt: F_CPU (MHz) ="), F_CPU/1000000, F(", TIMER_HZ ="), TIMER_HZ/1000000);
@@ -108,6 +104,14 @@
     }
     else
       return false;
+  }
+
+  // frequency (in hertz) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
+  // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
+  bool SAMDTimerInterrupt::setFrequency(const float& frequency, timerCallback callback)
+  {
+    _period =  (1000000.0f / frequency);
+    return _setPeriod((unsigned long)_period, callback);
   }
 
 
@@ -154,13 +158,9 @@
     }
   }
      
-  // frequency (in hertz) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
-  // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
-  bool SAMDTimerInterrupt::setFrequency(const float& frequency, timerCallback callback)
+  bool SAMDTimerInterrupt::_setPeriod(const unsigned long _period, timerCallback callback)
   {
-    _period =  (1000000.0f / frequency);
-    
-    TISR_LOGDEBUG3(F("_period ="), _period, F(", frequency ="), frequency);
+    TISR_LOGDEBUG1(F("_period ="), _period);
     
     if (_timerNumber == TIMER_TC3)
     {    
@@ -236,6 +236,14 @@
     return true;
   }
   
+  // frequency (in hertz) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
+  // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
+  bool SAMDTimerInterrupt::setFrequency(const float& frequency, timerCallback callback)
+  {
+    _period =  (1000000.0f / frequency);
+    TISR_LOGDEBUG3(F("_period ="), _period, F(", frequency ="), frequency);
+    return _setPeriod((unsigned long)_period, callback);
+  }
 
 #endif    // #if (TIMER_INTERRUPT_USING_SAMD51)
 
