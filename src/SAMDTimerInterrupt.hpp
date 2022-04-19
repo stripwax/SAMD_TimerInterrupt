@@ -415,7 +415,7 @@ class SAMDTimerInterrupt
 
   public:
 
-    SAMDTimerInterrupt(const SAMDTimerNumber& timerNumber) : initialized(false)
+    SAMDTimerInterrupt(const SAMDTimerNumber& timerNumber) : initialized(false), _prescaler(0)
     {
       _timerNumber = timerNumber;
            
@@ -539,6 +539,7 @@ class SAMDTimerInterrupt
       uint16_t ctrla = _Timer->CTRLA.reg;
 
       ctrla &= ~(TC_CTRLA_PRESCALER_DIV1024 | TC_CTRLA_PRESCALER_DIV256 | TC_CTRLA_PRESCALER_DIV64 | TC_CTRLA_PRESCALER_DIV16 | TC_CTRLA_PRESCALER_DIV4 | TC_CTRLA_PRESCALER_DIV2 | TC_CTRLA_PRESCALER_DIV1);
+      int old_prescaler = _prescaler;
       
       if (period > 300000) 
       {
@@ -591,26 +592,59 @@ class SAMDTimerInterrupt
 
       _compareValue = (int)(TIMER_HZ / (_prescaler / (period / 1000000.0))) - 1;
 
-      // Make sure the count is in a proportional position to where it was
-      // to prevent any jitter or disconnect when changing the compare value.
-      _Timer->READREQ.reg = TC_READREQ_RREQ | TC_READREQ_ADDR(0x10); // 0x10 is the offset of the 16-bit count register
-      while (_Timer->STATUS.bit.SYNCBUSY);
-      uint16_t prev_counter = _Timer->COUNT.reg;
+      if (old_prescaler==0)
+      {
+        // first time.  need to set prescaler, but don't care about current value of COUNT
+        // cannot update ctrla at the same time as the enabled bit is set
+        // so need to disable timer first
+        _Timer->CTRLA.reg &= ~TC_CTRLA_ENABLE;
+        while (_Timer->STATUS.bit.SYNCBUSY);
+      }
+      else if (_prescaler != old_prescaler)
+      {
+        // Make sure the count is in a proportional position to where it was
+        // to prevent any jitter or disconnect when changing the compare value.
+        _Timer->READREQ.reg = TC_READREQ_RREQ | TC_READREQ_ADDR(0x10); // 0x10 is the offset of the 16-bit count register
+        while (_Timer->STATUS.bit.SYNCBUSY);
+        uint16_t prev_counter = _Timer->COUNT.reg;
 
-      // cannot update ctrla at the same time as the enabled bit is set
-      _Timer->CTRLA.reg &= ~TC_CTRLA_ENABLE;
-      while (_Timer->STATUS.bit.SYNCBUSY);
+        // cannot update ctrla at the same time as the enabled bit is set
+        _Timer->CTRLA.reg &= ~TC_CTRLA_ENABLE;
+        while (_Timer->STATUS.bit.SYNCBUSY);
 
-      // need to synchronise the count and cc values
-      _Timer->READREQ.reg = TC_READREQ_RREQ | TC_READREQ_ADDR(0x18); // 0x18 is the offset of the 16-bit CC0 register
-      while (_Timer->STATUS.bit.SYNCBUSY);
+        // need to synchronise the count and cc values
+        _Timer->READREQ.reg = TC_READREQ_RREQ | TC_READREQ_ADDR(0x18); // 0x18 is the offset of the 16-bit CC0 register
+        while (_Timer->STATUS.bit.SYNCBUSY);
 
-      uint16_t old_compare_value = _Timer->CC[0].reg;
-      _Timer->CC[0].reg = (uint16_t)(-1); // max, so that changing Count doesn't end up wrapping it back to zero again due to the continuous comparison
+        uint16_t old_compare_value = _Timer->CC[0].reg;
+        _Timer->CC[0].reg = (uint16_t)(-1); // max, so that changing Count doesn't end up wrapping it back to zero again due to the continuous comparison
 
-      _Timer->COUNT.reg = map(prev_counter, 0, old_compare_value, 0, _compareValue);
-      while (_Timer->STATUS.bit.SYNCBUSY);
-      
+        // scale up (or down) prev_counter to match the new prescaler
+        // if new prescaler is lower, then scale up counter (but no higher than _compareValue)
+        // if new prescarar is higher, then scale down the counter (but no lower than 0)
+        if (_prescaler < old_prescaler)
+        {
+          while (_prescaler < old_prescaler)
+          {
+            old_prescaler >>= 1;
+            prev_counter <<= 1;
+          }
+          if (prev_counter >= _compareValue)
+            prev_counter = _compareValue;
+        }
+        else
+        {
+          while (_prescaler > old_prescaler)
+          {
+            old_prescaler <<= 1;
+            prev_counter >>= 1; // naturally floored at 0 anyway
+          }
+        }
+        _Timer->COUNT.reg = prev_counter;
+        while (_Timer->STATUS.bit.SYNCBUSY);
+      }
+
+      // in all cases, we need to set the (new) CC, and set the (new) prescaler and (re)enable the timer
       _Timer->CC[0].reg = _compareValue;
       while (_Timer->STATUS.bit.SYNCBUSY);
 
