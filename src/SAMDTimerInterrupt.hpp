@@ -192,11 +192,8 @@ class SAMDTimerInterrupt
     void*           _SAMDTimer = NULL;
     
     timerCallback   _callback;        // pointer to the callback function
-    float           _frequency;       // Timer frequency
     
-    float           _period;
     int             _prescaler;
-    int             _compareValue;
 
   public:
 
@@ -358,7 +355,7 @@ class SAMDTimerInterrupt
       TC3->COUNT16.CTRLA.reg |= TC_CTRLA_PRESCALER_DIVN;
       TC3_wait_for_sync();
 
-      _compareValue = (int)(TIMER_HZ / (_prescaler/(period / 1000000.0))) - 1;
+      uint16_t _compareValue = (uint16_t)(TIMER_HZ / (_prescaler/(period / 1000000.0))) - 1;
 
       // Make sure the count is in a proportional position to where it was
       // to prevent any jitter or disconnect when changing the compare value.
@@ -405,10 +402,8 @@ class SAMDTimerInterrupt
     void*           _SAMDTimer = NULL;
     
     timerCallback   _callback;        // pointer to the callback function
-    float           _frequency;       // Timer frequency
     //uint32_t        _timerCount;      // count to activate timer
     
-    float   _period;
     int             _prescaler;
     int             _compareValue;
     bool initialized;
@@ -533,80 +528,78 @@ class SAMDTimerInterrupt
     
     private:
     
+    inline byte getPrescalerBitShift(uint16_t ctrla)
+    {
+      // prescaler is stored in bits 8 thru 11 of ctrla, so we need to shift 8 bits right and mask off lower 4 bits
+      // conveniently, the value is the number of bits to shift i.e. value==0x0A => shift is 10 bits (1024 div) 
+      return (ctrla >> 8) & 0x000f;
+    }
+
     void setPeriod_TIMER_TC3(const float& period)
     {
       TcCount16* _Timer = (TcCount16*) TC3;
       uint16_t ctrla = _Timer->CTRLA.reg;
+      bool was_enabled = (ctrla & TC_CTRLA_ENABLE);
 
-      ctrla &= ~(TC_CTRLA_PRESCALER_DIV1024 | TC_CTRLA_PRESCALER_DIV256 | TC_CTRLA_PRESCALER_DIV64 | TC_CTRLA_PRESCALER_DIV16 | TC_CTRLA_PRESCALER_DIV4 | TC_CTRLA_PRESCALER_DIV2 | TC_CTRLA_PRESCALER_DIV1);
-      int old_prescaler = _prescaler;
-      
+      // get old prescaler from ctrla, convert to bit shift
+      byte old_prescaler = getPrescalerBitShift(ctrla);
+      byte new_prescaler = 0;
+
       if (period > 300000) 
       {
         // Set prescaler to 1024
-        ctrla |= TC_CTRLA_PRESCALER_DIV1024;
-        _prescaler = 1024;
+        new_prescaler = 10;
       } 
       else if (80000 < period && period <= 300000) 
       {
         // Set prescaler to 256
-        ctrla |= TC_CTRLA_PRESCALER_DIV256;
-        _prescaler = 256;
+        new_prescaler = 8;
       } 
       else if (20000 < period && period <= 80000) 
       {
         // Set prescaler to 64
-        ctrla |= TC_CTRLA_PRESCALER_DIV64;
-        _prescaler = 64;
+        new_prescaler = 6;
       } 
       else if (10000 < period && period <= 20000) 
       {
         // Set prescaler to 16
-        ctrla |= TC_CTRLA_PRESCALER_DIV16;
-        _prescaler = 16;
+        new_prescaler = 4;
       } 
       else if (5000 < period && period <= 10000) 
       {
         // Set prescaler to 8
-        ctrla |= TC_CTRLA_PRESCALER_DIV8;
-        _prescaler = 8;
+        new_prescaler = 3;
       } 
       else if (2500 < period && period <= 5000) 
       {
         // Set prescaler to 4
-        ctrla |= TC_CTRLA_PRESCALER_DIV4;
-        _prescaler = 4;
+        new_prescaler = 2;
       } 
       else if (1000 < period && period <= 2500) 
       {
         // Set prescaler to 2
-        ctrla |= TC_CTRLA_PRESCALER_DIV2;
-        _prescaler = 2;
+        new_prescaler = 1;
       } 
-      else if (period <= 1000) 
+      else // if (period <= 1000) 
       {
         // Set prescaler to 1
-        ctrla |= TC_CTRLA_PRESCALER_DIV1;
-        _prescaler = 1;
+        new_prescaler = 0;
       }
 
-      _compareValue = (int)(TIMER_HZ / (_prescaler / (period / 1000000.0))) - 1;
+      // mask out old prescaler value, and set the new prescaler value
+      ctrla = (ctrla & 0xf0ff) | ((new_prescaler) << 8);
 
-      if (old_prescaler==0)
-      {
-        // first time.  need to set prescaler, but don't care about current value of COUNT
-        // cannot update ctrla at the same time as the enabled bit is set
-        // so need to disable timer first
-        _Timer->CTRLA.reg &= ~TC_CTRLA_ENABLE;
-        while (_Timer->STATUS.bit.SYNCBUSY);
-      }
-      else if (_prescaler != old_prescaler)
+      uint16_t _compareValue = (uint16_t)(TIMER_HZ / ((1<<new_prescaler) / (period / 1000000.0))) - 1;
+
+      if (new_prescaler != old_prescaler && was_enabled)
       {
         // Make sure the count is in a proportional position to where it was
         // to prevent any jitter or disconnect when changing the compare value.
+        // But we only need to do this if the precaler changed, AND if the timer was enabled.
+
         _Timer->READREQ.reg = TC_READREQ_RREQ | TC_READREQ_ADDR(0x10); // 0x10 is the offset of the 16-bit count register
         while (_Timer->STATUS.bit.SYNCBUSY);
-        uint16_t prev_counter = _Timer->COUNT.reg;
+        uint16_t counter = _Timer->COUNT.reg;
 
         // cannot update ctrla at the same time as the enabled bit is set
         _Timer->CTRLA.reg &= ~TC_CTRLA_ENABLE;
@@ -619,28 +612,20 @@ class SAMDTimerInterrupt
         uint16_t old_compare_value = _Timer->CC[0].reg;
         _Timer->CC[0].reg = (uint16_t)(-1); // max, so that changing Count doesn't end up wrapping it back to zero again due to the continuous comparison
 
-        // scale up (or down) prev_counter to match the new prescaler
+        // scale up (or down) counter to match the new prescaler
         // if new prescaler is lower, then scale up counter (but no higher than _compareValue)
-        // if new prescarar is higher, then scale down the counter (but no lower than 0)
-        if (_prescaler < old_prescaler)
+        // if new prescaler is higher, then scale down the counter (but no lower than 0)
+        if (new_prescaler < old_prescaler)
         {
-          while (_prescaler < old_prescaler)
-          {
-            old_prescaler >>= 1;
-            prev_counter <<= 1;
-          }
-          if (prev_counter >= _compareValue)
-            prev_counter = _compareValue;
+          counter <<= (old_prescaler - new_prescaler);
+          if (counter > _compareValue)
+            counter = _compareValue;
         }
-        else
+        else // new_prescaler > old_prescaler
         {
-          while (_prescaler > old_prescaler)
-          {
-            old_prescaler <<= 1;
-            prev_counter >>= 1; // naturally floored at 0 anyway
-          }
+          counter >>= (new_prescaler - old_prescaler);
         }
-        _Timer->COUNT.reg = prev_counter;
+        _Timer->COUNT.reg = counter;
         while (_Timer->STATUS.bit.SYNCBUSY);
       }
 
