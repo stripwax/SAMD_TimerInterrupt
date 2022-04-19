@@ -67,7 +67,7 @@
     }
   }
 
-  bool SAMDTimerInterrupt::_setPeriod(const unsigned long _period, timerCallback callback)
+  bool SAMDTimerInterrupt::_setPeriod(const float& _period, timerCallback callback)
   {
     if (_timerNumber == TIMER_TC3)
     {    
@@ -110,8 +110,8 @@
   // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
   bool SAMDTimerInterrupt::setFrequency(const float& frequency, timerCallback callback)
   {
-    _period =  (1000000.0f / frequency);
-    return _setPeriod((unsigned long)_period, callback);
+    float _period =  (1000000.0f / frequency);
+    return _setPeriod(_period, callback);
   }
 
 
@@ -158,7 +158,7 @@
     }
   }
      
-  bool SAMDTimerInterrupt::_setPeriod(const unsigned long _period, timerCallback callback)
+  bool SAMDTimerInterrupt::_setPeriod(const float& _period, timerCallback callback)
   {
     TISR_LOGDEBUG1(F("_period ="), _period);
     
@@ -246,9 +246,9 @@
   // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
   bool SAMDTimerInterrupt::setFrequency(const float& frequency, timerCallback callback)
   {
-    _period =  (1000000.0f / frequency);
+    float _period =  (1000000.0f / frequency);
     TISR_LOGDEBUG3(F("_period ="), _period, F(", frequency ="), frequency);
-    return _setPeriod((unsigned long)_period, callback);
+    return _setPeriod(_period, callback);
   }
 
 #endif    // #if (TIMER_INTERRUPT_USING_SAMD51)

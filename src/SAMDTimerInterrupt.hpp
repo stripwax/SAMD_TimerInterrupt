@@ -217,7 +217,7 @@ class SAMDTimerInterrupt
     }
 
     bool setFrequency(const float& frequency, timerCallback callback);
-    bool _setPeriod(const unsigned long _period, timerCallback callback);
+    bool _setPeriod(const float& _period, timerCallback callback);
 
     // interval (in microseconds) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
     // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
@@ -436,7 +436,7 @@ class SAMDTimerInterrupt
     }
    
     bool setFrequency(const float& frequency, timerCallback callback);
-    bool _setPeriod(const unsigned long _period, timerCallback callback);
+    bool _setPeriod(const float& _period, timerCallback callback);
 
     // interval (in microseconds) and duration (in milliseconds). Duration = 0 or not specified => run indefinitely
     // No params and duration now. To be addes in the future by adding similar functions here or to SAMD-hal-timer.c
