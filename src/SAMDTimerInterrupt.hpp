@@ -527,16 +527,32 @@ class SAMDTimerInterrupt
     }
     
     private:
-    
     inline byte getPrescalerBitShift(uint16_t ctrla)
     {
       // prescaler is stored in bits 8 thru 11 of ctrla, so we need to shift 8 bits right and mask off lower 4 bits
-      // conveniently, the value is the number of bits to shift i.e. value==0x0A => shift is 10 bits (1024 div) 
-      return (ctrla >> 8) & 0x000f;
+      byte bits = (byte)((ctrla >> 8) & 0x000f);
+      if(bits<5) {
+        // conveniently, the value is the number of bits to shift i.e. value==0x04 => shift is 4 bits (16 div) 
+        return bits;
+      }
+      else if (bits==5) {
+        // 0x05 means 64 div (6 bits)
+        return 6;
+      }
+      else if (bits==6) {
+        // 0x06 means 256 div (8 bits)
+        return 8;
+      }
+      else {
+        // 0x07 means 1024 div (10 bits)
+        return 10;
+      }
     }
 
     void setPeriod_TIMER_TC3(const float& period)
     {
+      uint32_t TC_CTRLA_PRESCALER_DIVN = 1;
+
       TcCount16* _Timer = (TcCount16*) TC3;
       uint16_t ctrla = _Timer->CTRLA.reg;
       bool was_enabled = (ctrla & TC_CTRLA_ENABLE);
@@ -548,46 +564,54 @@ class SAMDTimerInterrupt
       if (period > 300000) 
       {
         // Set prescaler to 1024
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV1024;
         new_prescaler = 10;
       } 
       else if (80000 < period && period <= 300000) 
       {
         // Set prescaler to 256
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV256;
         new_prescaler = 8;
       } 
       else if (20000 < period && period <= 80000) 
       {
         // Set prescaler to 64
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV64;
         new_prescaler = 6;
       } 
       else if (10000 < period && period <= 20000) 
       {
         // Set prescaler to 16
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV16;
         new_prescaler = 4;
       } 
       else if (5000 < period && period <= 10000) 
       {
         // Set prescaler to 8
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV8;
         new_prescaler = 3;
       } 
       else if (2500 < period && period <= 5000) 
       {
         // Set prescaler to 4
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV4;
         new_prescaler = 2;
       } 
       else if (1000 < period && period <= 2500) 
       {
         // Set prescaler to 2
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV2;
         new_prescaler = 1;
       } 
       else // if (period <= 1000) 
       {
         // Set prescaler to 1
+        TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV1;
         new_prescaler = 0;
       }
 
       // mask out old prescaler value, and set the new prescaler value
-      ctrla = (ctrla & 0xf0ff) | ((new_prescaler) << 8);
+      ctrla = (ctrla & 0xf0ff) | TC_CTRLA_PRESCALER_DIVN;
 
       uint16_t _compareValue = (uint16_t)(TIMER_HZ / ((1<<new_prescaler) / (period / 1000000.0))) - 1;
 
